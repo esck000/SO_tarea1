@@ -4,4 +4,6 @@
 
 int ejecutar_comando(char *argv[], int argc, int background, Redirecciones *redirecciones);
 
+int ejecutar_pipeline(Pipeline *Pipeline);
+
 #endif

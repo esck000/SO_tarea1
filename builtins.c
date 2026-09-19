@@ -5,6 +5,7 @@
 
 #include "builtins.h"
 #include "jobs.h"
+#include "pmon.h"
 
 int ejecutar_builtin(int argc, char *argv[], int *codigo_salida)
 {
@@ -35,6 +36,30 @@ int ejecutar_builtin(int argc, char *argv[], int *codigo_salida)
         return BUILTIN_OK;
     }
 
+    if (strcmp(argv[0], "pmon") == 0) {
+
+        int segundos = 2;
+
+        if (argc > 2) {
+            fprintf(stderr, "Uso: pmon [segundos]\n");
+            return BUILTIN_OK;
+        }
+
+        if (argc == 2) {
+
+            segundos = atoi(argv[1]);
+
+            if (segundos <= 0) {
+                fprintf(stderr, "pmon: segundos debe ser mayor que 0\n");
+                return BUILTIN_OK;
+            }
+        }
+
+        ejecutar_pmon(segundos);
+
+        return BUILTIN_OK;
+    }
+
     if (strcmp(argv[0], "exit") == 0) {    // Si el comando es "exit", terminamos la shell. Si se proporciona un argumento, lo usamos como el código de salida.
 
         if (argc == 1) {
@@ -48,3 +73,4 @@ int ejecutar_builtin(int argc, char *argv[], int *codigo_salida)
 
     return BUILTIN_NO;
 }
+

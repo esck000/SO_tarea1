@@ -93,6 +93,20 @@ int ejecutar_comando(char *argv[], int argc, int background, Redirecciones *redi
     if (pid == 0) {               // Si estamos en el proceso hijo, ejecutamos el comando usando execvp().
         sigprocmask(SIG_SETMASK, &mascara_anterior, NULL); // Restauramos la máscara de señales original en el proceso hijo antes de ejecutar el comando.
 
+        if (!background) {
+
+            struct sigaction sa;
+
+            sa.sa_handler = SIG_DFL;
+            sigemptyset(&sa.sa_mask);
+            sa.sa_flags = 0;
+
+            if (sigaction(SIGINT, &sa, NULL) < 0) {
+                perror("sigaction SIGINT hijo");
+                _exit(1);
+            }
+        }
+        
         if (aplicar_redirecciones(redirecciones) < 0) {
             _exit(1);
         }
@@ -126,5 +140,173 @@ int ejecutar_comando(char *argv[], int argc, int background, Redirecciones *redi
 
     sigprocmask(SIG_SETMASK, &mascara_anterior, NULL); // Restauramos la máscara de señales original antes de retornar.
 
+    return 0;
+}
+
+int ejecutar_pipeline(Pipeline *pipeline)
+{
+    if (pipeline == NULL || pipeline->cantidad == 0) {
+        return 0;
+    }
+
+    /*
+    Si solamente hay un comando, seguimos usando el ejecutor
+    que ya tenemos y que sabemos que funciona.
+     */
+    if (pipeline->cantidad == 1) {
+
+        Comando *comando = &pipeline->comandos[0];
+
+        return ejecutar_comando(
+            comando->argv,
+            comando->argc,
+            pipeline->background,
+            &comando->redirecciones
+        );
+    }
+
+    sigset_t mascara_chld;
+    sigset_t mascara_anterior;
+
+    sigemptyset(&mascara_chld);
+    sigaddset(&mascara_chld, SIGCHLD);
+
+    if (sigprocmask(SIG_BLOCK, &mascara_chld, &mascara_anterior) < 0) {
+        perror("sigprocmask");      
+        return -1;
+    }
+
+    int cantidad_pipes = pipeline->cantidad - 1;
+    int pipes[MAX_COMANDOS - 1][2];
+
+    for (int i = 0; i < cantidad_pipes; i++) {
+
+        if (pipe(pipes[i]) < 0) {
+            perror("pipe");
+
+            for (int j = 0; j < i; j++) {
+                close(pipes[j][0]);
+                close(pipes[j][1]);
+            }
+
+            sigprocmask(SIG_SETMASK, &mascara_anterior, NULL);
+
+            return -1;
+        }
+    }
+
+    pid_t pids[MAX_COMANDOS];
+
+    for (int i = 0; i < pipeline->cantidad; i++) {
+
+        pid_t pid = fork();
+
+        if (pid < 0) {
+            perror("fork");
+
+            for (int j = 0; j < cantidad_pipes; j++) {
+                close(pipes[j][0]);
+                close(pipes[j][1]);
+            }
+
+            sigprocmask(SIG_SETMASK, &mascara_anterior, NULL);
+
+            return -1;
+        }
+
+        if (pid == 0) {
+
+            sigprocmask(SIG_SETMASK, &mascara_anterior, NULL);
+
+            if (!pipeline->background) {
+
+                struct sigaction sa;
+
+                sa.sa_handler = SIG_DFL;
+                sigemptyset(&sa.sa_mask);
+                sa.sa_flags = 0;
+
+                if (sigaction(SIGINT, &sa, NULL) < 0) {
+                    perror("sigaction SIGINT hijo");
+                    _exit(1);
+                }
+            }
+
+            /*
+            * Si no somos el primer comando,
+            * nuestra entrada viene del pipe anterior.
+            */
+            if (i > 0) {
+                if (dup2(pipes[i - 1][0], STDIN_FILENO) < 0) {
+                    perror("dup2");
+                    _exit(1);
+                }
+            }
+
+            /*
+            * Si no somos el último comando,
+            * nuestra salida va al pipe siguiente.
+            */
+            if (i < pipeline->cantidad - 1) {
+                if (dup2(pipes[i][1], STDOUT_FILENO) < 0) {
+                    perror("dup2");
+                    _exit(1);
+                }
+            }
+
+            /*
+            * Después de dup2(), el hijo ya no necesita
+            * ninguno de los descriptores originales de los pipes.
+            */
+            for (int j = 0; j < cantidad_pipes; j++) {
+                close(pipes[j][0]);
+                close(pipes[j][1]);
+            }
+
+            Comando *comando = &pipeline->comandos[i];
+
+            if (aplicar_redirecciones(&comando->redirecciones) < 0) {
+                _exit(1);
+            }
+
+            execvp(comando->argv[0], comando->argv);
+
+            perror("execvp");
+            _exit(127);
+        }
+
+        pids[i] = pid;
+    }
+
+    for (int i = 0; i < cantidad_pipes; i++) {
+        close(pipes[i][0]);
+        close(pipes[i][1]);
+    }
+
+    if (pipeline->background) {
+
+        int numero_job = agregar_job_pipeline(
+            pids,
+            pipeline->cantidad,
+            pipeline
+        );
+
+        if (numero_job < 0) {
+            fprintf(stderr, "No hay espacio para mas jobs\n");
+        } else {
+            printf("[%d] %d\n", numero_job, pids[0]);
+        }
+
+        sigprocmask(SIG_SETMASK, &mascara_anterior, NULL);
+
+        return 0;
+    }
+    
+    for (int i = 0; i < pipeline->cantidad; i++) {
+        waitpid(pids[i], NULL, 0);
+    }
+
+    sigprocmask(SIG_SETMASK, &mascara_anterior, NULL);
+    
     return 0;
 }

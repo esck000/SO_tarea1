@@ -6,11 +6,18 @@
 #include <sys/wait.h>
 #include "jobs.h"
 
+#define MAX_PROCESOS_JOB 64
+
 
 typedef struct { // Estructura para almacenar información de los trabajos en segundo plano.
     int numero;
-    pid_t pid;
+
+    pid_t pids[MAX_PROCESOS_JOB];
+    int cantidad_pids;
+    int procesos_restantes;
+
     char comando[1024];
+
     int activo;
     int terminado;
 } Job;
@@ -24,7 +31,9 @@ int agregar_job(pid_t pid, char *argv[], int argc)
 
         if (!jobs[i].activo && !jobs[i].terminado) { // Si encontramos un trabajo inactivo y no terminado, lo usamos para almacenar el nuevo trabajo.
             jobs[i].numero = siguiente_job;     // Asignamos un número único al trabajo.
-            jobs[i].pid = pid;                  // Guardamos el PID del proceso hijo.
+            jobs[i].pids[0] = pid;
+            jobs[i].cantidad_pids = 1;
+            jobs[i].procesos_restantes = 1;
             jobs[i].activo = 1;                 // Marcamos el trabajo como activo.
             jobs[i].terminado = 0;              // Marcamos el trabajo como no terminado.
 
@@ -62,14 +71,137 @@ int agregar_job(pid_t pid, char *argv[], int argc)
     return -1;
 }
 
+int agregar_job_pipeline(pid_t pids[], int cantidad_pids, Pipeline *pipeline)
+{
+    if (cantidad_pids <= 0 || cantidad_pids > MAX_PROCESOS_JOB) {
+        return -1;
+    }
+
+    for (int i = 0; i < MAX_JOBS; i++) {
+
+        if (!jobs[i].activo && !jobs[i].terminado) {
+
+            jobs[i].numero = siguiente_job;
+            jobs[i].activo = 1;
+            jobs[i].terminado = 0;
+
+            jobs[i].cantidad_pids = cantidad_pids;
+            jobs[i].procesos_restantes = cantidad_pids;
+
+            for (int j = 0; j < cantidad_pids; j++) {
+                jobs[i].pids[j] = pids[j];
+            }
+
+            jobs[i].comando[0] = '\0';
+            size_t usados = 0;
+
+            for (int c = 0; c < pipeline->cantidad; c++) {
+
+                if (c > 0) {
+                    int escritos = snprintf(
+                        jobs[i].comando + usados,
+                        sizeof(jobs[i].comando) - usados,
+                        " | "
+                    );
+
+                    if (escritos < 0 ||
+                        (size_t)escritos >= sizeof(jobs[i].comando) - usados) {
+                        break;
+                    }
+
+                    usados += (size_t)escritos;
+                }
+
+                Comando *comando = &pipeline->comandos[c];
+
+                for (int a = 0; a < comando->argc; a++) {
+
+                    int escritos = snprintf(
+                        jobs[i].comando + usados,
+                        sizeof(jobs[i].comando) - usados,
+                        "%s%s",
+                        (a == 0) ? "" : " ",
+                        comando->argv[a]
+                    );
+
+                    if (escritos < 0 ||
+                        (size_t)escritos >= sizeof(jobs[i].comando) - usados) {
+                        break;
+                    }
+
+                    usados += (size_t)escritos;
+                }
+            }
+
+            siguiente_job++;
+
+            return jobs[i].numero;
+        }
+    }
+
+    return -1;
+}
+
+int obtener_procesos_activos(ProcesoJobInfo procesos[], int max_procesos)
+{
+    if (procesos == NULL || max_procesos <= 0) {
+        return 0;
+    }
+
+    sigset_t mascara_chld;
+    sigset_t mascara_anterior;
+
+    sigemptyset(&mascara_chld);
+    sigaddset(&mascara_chld, SIGCHLD);
+
+    if (sigprocmask(SIG_BLOCK, &mascara_chld, &mascara_anterior) < 0) {
+        perror("sigprocmask");
+        return -1;
+    }
+
+    int cantidad = 0;
+
+    for (int i = 0; i < MAX_JOBS && cantidad < max_procesos; i++) {
+
+        if (!jobs[i].activo) {
+            continue;
+        }
+
+        for (int j = 0;
+             j < jobs[i].cantidad_pids && cantidad < max_procesos;
+             j++) {
+
+            if (jobs[i].pids[j] == 0) {
+                continue;
+            }
+
+            procesos[cantidad].pid = jobs[i].pids[j];
+
+            snprintf(
+                procesos[cantidad].comando,
+                sizeof(procesos[cantidad].comando),
+                "%s",
+                jobs[i].comando
+            );
+
+            cantidad++;
+        }
+    }
+
+    sigprocmask(SIG_SETMASK, &mascara_anterior, NULL);
+
+    return cantidad;
+}
+
 void mostrar_jobs(void)
 {
     for (int i = 0; i < MAX_JOBS; i++) { // Itera a través de todos los trabajos en segundo plano.
 
         if (jobs[i].activo) {          // Si el trabajo está activo, lo mostramos.
-            printf("[%d] Ejecutando %s\n",
-                   jobs[i].numero,
-                   jobs[i].comando);
+        printf("[%d] %d Ejecutando %s\n",
+            jobs[i].numero,
+            jobs[i].pids[0],
+            jobs[i].comando);
         }
     }
 }
@@ -77,11 +209,26 @@ void mostrar_jobs(void)
 
 static void marcar_job_terminado(pid_t pid)
 {
-    for (int i = 0; i < MAX_JOBS; i++) {    
-        if (jobs[i].activo && jobs[i].pid == pid) { // Si encontramos el trabajo con el PID especificado, lo marcamos como inactivo.
-            jobs[i].activo = 0;
-            jobs[i].terminado = 1;
-            break;
+    for (int i = 0; i < MAX_JOBS; i++) {
+
+        if (!jobs[i].activo) {
+            continue;
+        }
+
+        for (int j = 0; j < jobs[i].cantidad_pids; j++) {
+
+            if (jobs[i].pids[j] == pid) {
+
+                jobs[i].pids[j] = 0;
+                jobs[i].procesos_restantes--;
+
+                if (jobs[i].procesos_restantes == 0) {
+                    jobs[i].activo = 0;
+                    jobs[i].terminado = 1;
+                }
+
+                return;
+            }
         }
     }
 }

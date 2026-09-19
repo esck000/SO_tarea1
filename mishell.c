@@ -10,6 +10,7 @@
 #include "executor.h" // Incluimos el archivo de cabecera executor.h que contiene la declaración de la función ejecutar_comando().
 #include "jobs.h" // Incluimos el archivo de cabecera jobs.h que contiene la declaración de las funciones relacionadas con los trabajos en segundo plano.
 
+#include <signal.h>
 
 
 void mostrar_prompt(void)
@@ -26,14 +27,29 @@ void mostrar_prompt(void)
     fflush(stdout);
 }
 
+static void configurar_senales_shell(void)
+{
+    struct sigaction sa;
+
+    sa.sa_handler = SIG_IGN;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+
+    if (sigaction(SIGINT, &sa, NULL) < 0) {
+        perror("sigaction SIGINT");
+    }
+
+    if (sigaction(SIGQUIT, &sa, NULL) < 0) {
+        perror("sigaction SIGQUIT");
+    }
+}
 
 int main(void)
 {
-    char linea[1024]; // Variable para almacenar la línea de comando ingresada por el usuario.
-    char *argv[MAX_ARGS];  //Arreglo de punteros a char para almacenar los argumentos de la línea de comando.
-    int background; // Variable para indicar si el comando se debe ejecutar en segundo plano.   
-    Redirecciones redirecciones; // Variable para almacenar la información de redirección de entrada/salida.
+    char linea[MAX_LINEA];
+    Pipeline pipeline;
 
+    configurar_senales_shell();
     configurar_sigchld(); // Configuramos el manejador de la señal SIGCHLD para manejar la terminación de procesos hijos.
 
     while(1){              // Bucle para mostrar el prompt de mi shell.
@@ -45,31 +61,40 @@ int main(void)
             printf("\n");
             break; // Salir del bucle si se recibe EOF (Ctrl+D).
         }
-        int argc = parsear_linea(linea, argv, &background, &redirecciones); // Llamada a la función para dividir la línea de comando en argumentos.
+        int cantidad = parsear_linea(linea, &pipeline);
 
-        if(argc < 0) { // Si argc es negativo, significa que hubo un error en el parseo de la línea de comando.
-            continue; // Volvemos al prompt para que el usuario ingrese otro comando.
-        }
-
-        if(argc == 0) {
-            continue; // Salir si no se ingresaron argumentos (vuelve al while).
-        }
-
-        int codigo_salida = 0;
-        int resultado_builtin = ejecutar_builtin(argc, argv, &codigo_salida);
-
-        if (resultado_builtin == BUILTIN_OK) { // Si el comando era un built-in y ya se ejecutó, volvemos al prompt.
+        if (cantidad < 0) {
             continue;
         }
 
-        if (resultado_builtin == BUILTIN_EXIT) { // Si el comando es "exit", salimos del bucle y terminamos la shell.
-            return codigo_salida;
+        if (cantidad == 0) {
+            continue;
         }
 
-        if (ejecutar_comando(argv, argc, background, &redirecciones) < 0) {
+        if (pipeline.cantidad == 1) {
+
+            Comando *comando = &pipeline.comandos[0];
+
+            int codigo_salida = 0;
+
+            int resultado_builtin = ejecutar_builtin(
+                comando->argc,
+                comando->argv,
+                &codigo_salida
+            );
+
+            if (resultado_builtin == BUILTIN_OK) {
+                continue;
+            }
+
+            if (resultado_builtin == BUILTIN_EXIT) {
+                return codigo_salida;
+            }
+        }
+
+        if (ejecutar_pipeline(&pipeline) < 0) {
             return EXIT_FAILURE;
         }
-        
     }
 
     

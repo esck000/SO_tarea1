@@ -3,14 +3,78 @@
 #include <stdio.h>
 
 
-int parsear_linea(char *linea, char *argv[], int *background, Redirecciones *redirecciones)
+static int parsear_comando(char *texto, Comando *comando)
 {
     int argc = 0;
 
-    *background = 0;
-    redirecciones->entrada = NULL;    // Inicializamos las redirecciones de entrada y salida a NULL y el flag de append a 0.
-    redirecciones->salida = NULL;     // redirecciones->salida es equivalente a (*redirecciones).salida
-    redirecciones->append = 0;
+    comando->redirecciones.entrada = NULL;
+    comando->redirecciones.salida = NULL;
+    comando->redirecciones.append = 0;
+
+    char *saveptr = NULL;
+    char *token = strtok_r(texto, " \t\n", &saveptr);  
+
+    while (token != NULL && argc < MAX_ARGS - 1) {
+
+        if (strcmp(token, "<") == 0) {
+
+            token = strtok_r(NULL, " \t\n", &saveptr);
+
+            if (token == NULL) {
+                fprintf(stderr,
+                        "Error: falta archivo despues de <\n");
+                return -1;
+            }
+
+            comando->redirecciones.entrada = token;
+        }
+
+        else if (strcmp(token, ">") == 0) {
+
+            token = strtok_r(NULL, " \t\n", &saveptr);
+
+            if (token == NULL) {
+                fprintf(stderr,
+                        "Error: falta archivo despues de >\n");
+                return -1;
+            }
+
+            comando->redirecciones.salida = token;
+            comando->redirecciones.append = 0;
+        }
+
+        else if (strcmp(token, ">>") == 0) {
+
+            token = strtok_r(NULL, " \t\n", &saveptr);
+
+            if (token == NULL) {
+                fprintf(stderr,
+                        "Error: falta archivo despues de >>\n");
+                return -1;
+            }
+
+            comando->redirecciones.salida = token;
+            comando->redirecciones.append = 1;
+        }
+
+        else {
+            comando->argv[argc] = token;
+            argc++;
+        }
+
+        token = strtok_r(NULL, " \t\n", &saveptr);
+    }
+
+    comando->argv[argc] = NULL;
+    comando->argc = argc;
+
+    return argc;
+}
+
+int parsear_linea(char *linea, Pipeline *pipeline)
+{
+    pipeline->cantidad = 0;
+    pipeline->background = 0;
 
     size_t largo = strlen(linea);
 
@@ -24,61 +88,38 @@ int parsear_linea(char *linea, char *argv[], int *background, Redirecciones *red
     }
 
     if (largo > 0 && linea[largo - 1] == '&') {
-        *background = 1;
+        pipeline->background = 1;
         linea[largo - 1] = '\0';
     }
 
-    char *token = strtok(linea, " \t\n");
+    char *saveptr = NULL;
+    char *segmento = strtok_r(linea, "|", &saveptr);
 
-    while (token != NULL && argc < MAX_ARGS - 1) {
+    while (segmento != NULL) {
 
-        if (strcmp(token, "<") == 0) {
-
-            token = strtok(NULL, " \t\n");
-
-            if (token == NULL) {
-                fprintf(stderr, "Error: falta archivo despues de <\n");
-                return -1;
-            }
-
-            redirecciones->entrada = token;
+        if (pipeline->cantidad >= MAX_COMANDOS) {
+            fprintf(stderr,
+                    "Error: demasiados comandos en el pipeline\n");
+            return -1;
         }
 
-        else if (strcmp(token, ">") == 0) {
+        Comando *comando =
+            &pipeline->comandos[pipeline->cantidad];
 
-            token = strtok(NULL, " \t\n");
-
-            if (token == NULL) {
-                fprintf(stderr, "Error: falta archivo despues de >\n");
-                return -1;
-            }
-
-            redirecciones->salida = token;
-            redirecciones->append = 0;
+        if (parsear_comando(segmento, comando) < 0) {
+            return -1;
         }
 
-        else if (strcmp(token, ">>") == 0) {
-
-            token = strtok(NULL, " \t\n");
-
-            if (token == NULL) {
-                fprintf(stderr, "Error: falta archivo despues de >>\n");
-                return -1;
-            }
-
-            redirecciones->salida = token;
-            redirecciones->append = 1;
+        if (comando->argc == 0) {
+            fprintf(stderr,
+                    "Error: comando vacio en pipeline\n");
+            return -1;
         }
 
-        else {
-            argv[argc] = token;
-            argc++;
-        }
+        pipeline->cantidad++;
 
-        token = strtok(NULL, " \t\n");
+        segmento = strtok_r(NULL, "|", &saveptr);
     }
 
-    argv[argc] = NULL;
-
-    return argc;
+    return pipeline->cantidad;
 }
