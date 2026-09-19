@@ -2,6 +2,35 @@
 #include "parser.h"
 #include <stdio.h>
 
+static int validar_pipeline(const char *linea)
+{
+    int hay_contenido = 0;
+
+    for (int i = 0; linea[i] != '\0'; i++) {
+
+        if (linea[i] == '|') {
+
+            if (!hay_contenido) {
+                return -1;
+            }
+
+            hay_contenido = 0;
+        }
+        else if (linea[i] != ' ' &&
+                 linea[i] != '\t' &&
+                 linea[i] != '\n') {
+
+            hay_contenido = 1;
+        }
+    }
+
+    if (!hay_contenido) {
+        return -1;
+    }
+
+    return 0;
+}
+
 
 static int parsear_comando(char *texto, Comando *comando)
 {
@@ -86,10 +115,19 @@ int parsear_linea(char *linea, Pipeline *pipeline)
         linea[largo - 1] = '\0';
         largo--;
     }
+    
+    if (largo == 0) {
+        return 0;
+    }
 
     if (largo > 0 && linea[largo - 1] == '&') {
         pipeline->background = 1;
         linea[largo - 1] = '\0';
+    }
+
+    if (validar_pipeline(linea) < 0) {
+        fprintf(stderr, "Error: comando vacio en pipeline\n");
+        return -1;
     }
 
     char *saveptr = NULL;

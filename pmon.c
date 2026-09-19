@@ -280,7 +280,7 @@ int ejecutar_pmon(int segundos)
                 break;
             }
 
-            printf("\nPID\tESTADO\tCPU(%%)\tRSS(KB)\tCOMANDO\n");
+            printf("\nPID\tCOMANDO\tESTADO\tCPU(%%)\tRSS(KB)\n");
 
             for (int i = 0; i < cantidad; i++) {
 
@@ -372,12 +372,12 @@ int ejecutar_pmon(int segundos)
                 }
 
                 printf(
-                    "%d\t%c\t%.1f\t%lu\t%s\n",
+                    "%d\t%s\t%c\t%.1f\t%lu\n",
                     procesos[i].pid,
+                    procesos[i].comando,
                     estado,
                     cpu,
-                    rss_kb,
-                    procesos[i].comando
+                    rss_kb
                 );
             }
 

@@ -195,14 +195,40 @@ int obtener_procesos_activos(ProcesoJobInfo procesos[], int max_procesos)
 
 void mostrar_jobs(void)
 {
-    for (int i = 0; i < MAX_JOBS; i++) { // Itera a través de todos los trabajos en segundo plano.
+    sigset_t mascara_chld;
+    sigset_t mascara_anterior;
 
-        if (jobs[i].activo) {          // Si el trabajo está activo, lo mostramos.
-        printf("[%d] %d Ejecutando %s\n",
-            jobs[i].numero,
-            jobs[i].pids[0],
-            jobs[i].comando);
+    sigemptyset(&mascara_chld);
+    sigaddset(&mascara_chld, SIGCHLD);
+
+    if (sigprocmask(SIG_BLOCK, &mascara_chld, &mascara_anterior) < 0) {
+        perror("sigprocmask");
+        return;
+    }
+
+    for (int i = 0; i < MAX_JOBS; i++) {
+
+        if (jobs[i].activo) {
+
+            pid_t pid_activo = 0;
+
+            for (int j = 0; j < jobs[i].cantidad_pids; j++) {
+
+                if (jobs[i].pids[j] != 0) {
+                    pid_activo = jobs[i].pids[j];
+                    break;
+                }
+            }
+
+            printf("[%d] %d Ejecutando %s\n",
+                jobs[i].numero,
+                pid_activo,
+                jobs[i].comando);
         }
+    }
+
+    if (sigprocmask(SIG_SETMASK, &mascara_anterior, NULL) < 0) {
+        perror("sigprocmask");
     }
 }
 
@@ -235,6 +261,17 @@ static void marcar_job_terminado(pid_t pid)
 
 void mostrar_jobs_terminados(void)
 {
+    sigset_t mascara_chld;
+    sigset_t mascara_anterior;
+
+    sigemptyset(&mascara_chld);
+    sigaddset(&mascara_chld, SIGCHLD);
+
+    if (sigprocmask(SIG_BLOCK, &mascara_chld, &mascara_anterior) < 0) {
+        perror("sigprocmask");
+        return;
+    }
+
     for (int i = 0; i < MAX_JOBS; i++) {
 
         if (jobs[i].terminado) {
@@ -245,6 +282,10 @@ void mostrar_jobs_terminados(void)
 
             jobs[i].terminado = 0;
         }
+    }
+
+    if (sigprocmask(SIG_SETMASK, &mascara_anterior, NULL) < 0) {
+        perror("sigprocmask");
     }
 }
 

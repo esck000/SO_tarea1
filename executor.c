@@ -132,13 +132,16 @@ int ejecutar_comando(char *argv[], int argc, int background, Redirecciones *redi
         return 0;
     }
 
-    int status;
-
-    if (waitpid(pid, &status, 0) < 0) {        // Si el comando se ejecuta en primer plano, esperamos a que termine y mostramos un mensaje de error si waitpid() falla.
-        perror("waitpid");
+    if (sigprocmask(SIG_SETMASK, &mascara_anterior, NULL) < 0) {
+        perror("sigprocmask");
+        return -1;
     }
 
-    sigprocmask(SIG_SETMASK, &mascara_anterior, NULL); // Restauramos la máscara de señales original antes de retornar.
+    int status;
+
+    if (waitpid(pid, &status, 0) < 0 && errno != ECHILD) {        // Si el comando se ejecuta en primer plano, esperamos a que termine y mostramos un mensaje de error si waitpid() falla.
+        perror("waitpid");
+    }
 
     return 0;
 }
@@ -207,6 +210,20 @@ int ejecutar_pipeline(Pipeline *pipeline)
             for (int j = 0; j < cantidad_pipes; j++) {
                 close(pipes[j][0]);
                 close(pipes[j][1]);
+            }
+
+            for (int j = 0; j < i; j++) {
+
+                if (kill(pids[j], SIGKILL) < 0 && errno != ESRCH) {
+                    perror("kill");
+                }
+            }
+
+            for (int j = 0; j < i; j++) {
+
+                if (waitpid(pids[j], NULL, 0) < 0 && errno != ECHILD) {
+                    perror("waitpid");
+                }
             }
 
             sigprocmask(SIG_SETMASK, &mascara_anterior, NULL);
@@ -302,11 +319,17 @@ int ejecutar_pipeline(Pipeline *pipeline)
         return 0;
     }
     
-    for (int i = 0; i < pipeline->cantidad; i++) {
-        waitpid(pids[i], NULL, 0);
+    if (sigprocmask(SIG_SETMASK, &mascara_anterior, NULL) < 0) {
+        perror("sigprocmask");
+        return -1;
     }
 
-    sigprocmask(SIG_SETMASK, &mascara_anterior, NULL);
-    
+    for (int i = 0; i < pipeline->cantidad; i++) {
+
+        if (waitpid(pids[i], NULL, 0) < 0 && errno != ECHILD) {
+            perror("waitpid");
+        }
+    }
+
     return 0;
 }
