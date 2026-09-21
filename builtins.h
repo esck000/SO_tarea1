@@ -7,7 +7,7 @@
 #define BUILTIN_EXIT 2  // El comando es "exit": la shell debe terminar con el código guardado en *codigo_salida.
 
 // Si argv[0] es un built-in (cd, jobs, pmon o exit), lo ejecuta en el proceso de la shell, sin fork().
-// argc y argv son los argumentos del comando ya parseado; codigo_salida solo se escribe cuando el comando es "exit".
-int ejecutar_builtin(int argc, char *argv[], int *codigo_salida);
 
+int ejecutar_builtin(int argc, char *argv[], int *codigo_salida);
+// argc y argv son los argumentos del comando ya procesado, codigo_salida solo se escribe cuando el comando es "exit"
 #endif

@@ -2,17 +2,19 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
+#include <unistd.h>       // fork(), execvp(), dup2(), pipe(), close()
 #include <sys/types.h>
-#include <sys/wait.h>
-#include <signal.h>
+#include <sys/wait.h>     // waitpid()
+#include <signal.h>       // sigaction(), sigprocmask(), kill()
 
 #include "executor.h"
 #include "jobs.h"
 
 #include <fcntl.h> // Para usar open() y O_CREAT, O_WRONLY, O_TRUNC, O_APPEND
-#include <errno.h>
+#include <errno.h>       // errno, ECHILD, ESRCH
 
+// Se llama en el hijo para conectar stdin y stdout a los archivos de <, > o >>.
+// Retorna 0 si todo salió bien y -1 si algún open() o dup2() falla.
 static int aplicar_redirecciones(Redirecciones *redirecciones)
 {
     int fd;
@@ -26,7 +28,7 @@ static int aplicar_redirecciones(Redirecciones *redirecciones)
             return -1;
         }
 
-        if (dup2(fd, STDIN_FILENO) < 0) {        // Duplicamos el descriptor de archivo en STDIN_FILENO. Si dup2() falla, mostramos un mensaje de error y retornamos -1.
+        if (dup2(fd, STDIN_FILENO) < 0) { // Duplicamos el descriptor de archivo en STDIN_FILENO. Si dup2() falla, mostramos un mensaje de error y retornamos -1.
             perror("dup2");
             close(fd);
             return -1;
@@ -37,7 +39,8 @@ static int aplicar_redirecciones(Redirecciones *redirecciones)
 
     if (redirecciones->salida != NULL) { // Si hay redirección de salida, abrimos el archivo y duplicamos el descriptor de archivo en STDOUT_FILENO.
 
-        int flags = O_WRONLY | O_CREAT;  // Abrimos el archivo de salida en modo escritura y creamos el archivo si no existe. Si redirecciones->append es 1, abrimos el archivo en modo append, de lo contrario, truncamos el archivo.
+        int flags = O_WRONLY | O_CREAT;  // Abrimos el archivo de salida en modo escritura y creamos el archivo si no existe. 
+        //Si redirecciones->append es 1, abrimos el archivo en modo append, de lo contrario, truncamos el archivo.
 
         if (redirecciones->append) { // Si redirecciones->append es 1, abrimos el archivo en modo append, de lo contrario, truncamos el archivo.
             flags |= O_APPEND;
@@ -66,6 +69,9 @@ static int aplicar_redirecciones(Redirecciones *redirecciones)
 
 
 
+// Ejecuta un solo comando con fork() + execvp().
+// En foreground espera con waitpid(); en background lo registra como job y retorna de inmediato.
+// Retorna 0 si todo salió bien y -1 si falla fork() o sigprocmask().
 int ejecutar_comando(char *argv[], int argc, int background, Redirecciones *redirecciones)
 {
     sigset_t mascara_chld;
@@ -74,13 +80,13 @@ int ejecutar_comando(char *argv[], int argc, int background, Redirecciones *redi
 
     sigemptyset(&mascara_chld); // Inicializamos la máscara de señales para bloquear SIGCHLD.
     sigaddset(&mascara_chld, SIGCHLD); // Agregamos SIGCHLD a la máscara de señales.
-
-    if (sigprocmask(SIG_BLOCK, &mascara_chld, &mascara_anterior) < 0) { // Bloqueamos SIGCHLD para evitar que el manejador de señales se ejecute mientras estamos agregando el trabajo a la lista.
+    // Bloqueamos SIGCHLD para evitar que el manejador de señales se ejecute mientras estamos agregando el trabajo a la lista
+    if (sigprocmask(SIG_BLOCK, &mascara_chld, &mascara_anterior) < 0) { 
         perror("sigprocmask");
         return -1;
     }
     
-    pid_t pid = fork();
+    pid_t pid = fork();     // Creamos el proceso hijo.
 
     if (pid < 0) {                  // Si fork() falla, mostramos un mensaje de error y retornamos -1.
         perror("fork");
@@ -117,7 +123,7 @@ int ejecutar_comando(char *argv[], int argc, int background, Redirecciones *redi
         _exit(127);
     }
 
-    if (background) {             // Si el comando se ejecuta en segundo plano, agregamos el trabajo a la lista de trabajos y mostramos su número y PID.
+    if (background) {  //Si el comando se ejecuta en segundo plano, agregamos el trabajo a la lista de trabajos y mostramos su número y PID.
 
         int numero_job = agregar_job(pid, argv, argc);
 
@@ -139,23 +145,26 @@ int ejecutar_comando(char *argv[], int argc, int background, Redirecciones *redi
 
     int status;
 
-    if (waitpid(pid, &status, 0) < 0 && errno != ECHILD) {        // Si el comando se ejecuta en primer plano, esperamos a que termine y mostramos un mensaje de error si waitpid() falla.
-        perror("waitpid");
+    if (waitpid(pid, &status, 0) < 0 && errno != ECHILD) {        // Si el comando se ejecuta en primer plano, 
+        perror("waitpid");                                  //esperamos a que termine y mostramos un mensaje de error si waitpid() falla.
     }
 
     return 0;
 }
 
+// Ejecuta un pipeline de 1 a N comandos osea un hijo por comando, conectados con pipe().
+// En foreground espera a todos los hijos; en background registra el pipeline como un solo job.
+// Retorna 0 si todo salió bien y -1 si falla pipe(), fork() o sigprocmask().
 int ejecutar_pipeline(Pipeline *pipeline)
 {
-    if (pipeline == NULL || pipeline->cantidad == 0) {
+    if (pipeline == NULL || pipeline->cantidad == 0) {     // No hay nada que ejecutar.
         return 0;
     }
 
-    /*
-    Si solamente hay un comando, seguimos usando el ejecutor
-    que ya tenemos y que sabemos que funciona.
-     */
+
+    // Si solamente hay un comando, seguimos usando el ejecutor
+    //que ya tenemos y que sabemos que funciona.
+    
     if (pipeline->cantidad == 1) {
 
         Comando *comando = &pipeline->comandos[0];
@@ -168,6 +177,7 @@ int ejecutar_pipeline(Pipeline *pipeline)
         );
     }
 
+    // Bloqueamos SIGCHLD mientras creamos los hijos y registramos el job.
     sigset_t mascara_chld;
     sigset_t mascara_anterior;
 
@@ -179,12 +189,12 @@ int ejecutar_pipeline(Pipeline *pipeline)
         return -1;
     }
 
-    int cantidad_pipes = pipeline->cantidad - 1;
-    int pipes[MAX_COMANDOS - 1][2];
+    int cantidad_pipes = pipeline->cantidad - 1;    // Hay un pipe entre cada par de comandos.
+    int pipes[MAX_COMANDOS - 1][2];                 // pipes[i] conecta el comando i con el i+1.
 
     for (int i = 0; i < cantidad_pipes; i++) {
 
-        if (pipe(pipes[i]) < 0) {
+        if (pipe(pipes[i]) < 0) {       // Si un pipe falla, cerramos los que ya se crearon.
             perror("pipe");
 
             for (int j = 0; j < i; j++) {
@@ -198,11 +208,11 @@ int ejecutar_pipeline(Pipeline *pipeline)
         }
     }
 
-    pid_t pids[MAX_COMANDOS];
+    pid_t pids[MAX_COMANDOS];       // PID de cada hijo, en el orden del pipeline.
 
     for (int i = 0; i < pipeline->cantidad; i++) {
 
-        pid_t pid = fork();
+        pid_t pid = fork();     // Un hijo por cada comando.
 
         if (pid < 0) {
             perror("fork");
@@ -214,14 +224,15 @@ int ejecutar_pipeline(Pipeline *pipeline)
 
             for (int j = 0; j < i; j++) {
 
-                if (kill(pids[j], SIGKILL) < 0 && errno != ESRCH) {
+                // Si el hijo ya fue creado, lo matamos.
+                if (kill(pids[j], SIGKILL) < 0 && errno != ESRCH) {     // Si fork() falla, matamos los hijos ya creados
                     perror("kill");
                 }
             }
 
             for (int j = 0; j < i; j++) {
 
-                if (waitpid(pids[j], NULL, 0) < 0 && errno != ECHILD) {
+                if (waitpid(pids[j], NULL, 0) < 0 && errno != ECHILD) {     //  para no dejar zombies.
                     perror("waitpid");
                 }
             }
@@ -231,11 +242,11 @@ int ejecutar_pipeline(Pipeline *pipeline)
             return -1;
         }
 
-        if (pid == 0) {
+        if (pid == 0) {         // Hijo, conecta sus pipes, aplica sus redirecciones y ejecuta su comando.
 
             sigprocmask(SIG_SETMASK, &mascara_anterior, NULL);
 
-            if (!pipeline->background) {
+            if (!pipeline->background) {    // En foreground, Ctrl+C debe terminar al hijo.
 
                 struct sigaction sa;
 
@@ -249,10 +260,10 @@ int ejecutar_pipeline(Pipeline *pipeline)
                 }
             }
 
-            /*
-            * Si no somos el primer comando,
-            * nuestra entrada viene del pipe anterior.
-            */
+            
+            //Si no es el primer comando,
+            // la entrada viene del pipe anterior.
+            
             if (i > 0) {
                 if (dup2(pipes[i - 1][0], STDIN_FILENO) < 0) {
                     perror("dup2");
@@ -260,10 +271,9 @@ int ejecutar_pipeline(Pipeline *pipeline)
                 }
             }
 
-            /*
-            * Si no somos el último comando,
-            * nuestra salida va al pipe siguiente.
-            */
+            //Si no es el último comando,
+            // la salida va al pipe siguiente.
+            
             if (i < pipeline->cantidad - 1) {
                 if (dup2(pipes[i][1], STDOUT_FILENO) < 0) {
                     perror("dup2");
@@ -271,10 +281,9 @@ int ejecutar_pipeline(Pipeline *pipeline)
                 }
             }
 
-            /*
-            * Después de dup2(), el hijo ya no necesita
-            * ninguno de los descriptores originales de los pipes.
-            */
+            //Después de dup2(), el hijo ya no necesita
+            // ninguno de los descriptores originales de los pipes.
+            
             for (int j = 0; j < cantidad_pipes; j++) {
                 close(pipes[j][0]);
                 close(pipes[j][1]);
@@ -282,25 +291,25 @@ int ejecutar_pipeline(Pipeline *pipeline)
 
             Comando *comando = &pipeline->comandos[i];
 
-            if (aplicar_redirecciones(&comando->redirecciones) < 0) {
+            if (aplicar_redirecciones(&comando->redirecciones) < 0) {   // Una redirección pisa al pipe en ese extremo.
                 _exit(1);
             }
 
-            execvp(comando->argv[0], comando->argv);
+            execvp(comando->argv[0], comando->argv);    // Si execvp() retorna, hubo un error.
 
             perror("execvp");
             _exit(127);
         }
 
-        pids[i] = pid;
+        pids[i] = pid;      // Padre, guardamos el PID del hijo.
     }
 
     for (int i = 0; i < cantidad_pipes; i++) {
-        close(pipes[i][0]);
+        close(pipes[i][0]);     // El padre ya no usa los pipes: los cierra para que los lectores reciban EOF.
         close(pipes[i][1]);
     }
 
-    if (pipeline->background) {
+    if (pipeline->background) {     // Background, registramos el job y no esperamos.
 
         int numero_job = agregar_job_pipeline(
             pids,
@@ -326,7 +335,7 @@ int ejecutar_pipeline(Pipeline *pipeline)
 
     for (int i = 0; i < pipeline->cantidad; i++) {
 
-        if (waitpid(pids[i], NULL, 0) < 0 && errno != ECHILD) {
+        if (waitpid(pids[i], NULL, 0) < 0 && errno != ECHILD) {     // esperamos a todos los procesos del pipeline.
             perror("waitpid");
         }
     }
