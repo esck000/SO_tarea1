@@ -1,11 +1,11 @@
 #define _POSIX_C_SOURCE 200809L     // Habilita sigaction(), alarm() y clock_gettime().
 
-#include <stdio.h>        // printf(), fopen(), sscanf()
-#include <stdlib.h>       // calloc(), free()
-#include <string.h>       // strrchr(), strncmp()
-#include <signal.h>       // sigaction(), alarm(), sigsuspend()
-#include <unistd.h>       // sysconf()
-#include <time.h>         // clock_gettime()
+#include <stdio.h>        
+#include <stdlib.h>       
+#include <string.h>       
+#include <signal.h>       
+#include <unistd.h>       
+#include <time.h>         
 
 #include "pmon.h"         // ejecutar_pmon()
 #include "jobs.h"         // obtener_procesos_activos()
@@ -17,22 +17,22 @@ static volatile sig_atomic_t salir_pmon = 0;        // SIGINT la pone en 1: hay 
 // Última lectura de CPU de un proceso, para calcular el % con la diferencia.
 typedef struct {
     pid_t pid;                          // Proceso al que pertenece la lectura.
-    unsigned long ticks_anteriores;     // utime + stime de la lectura anterior.
-    struct timespec tiempo_anterior;    // Momento de la lectura anterior.
+    unsigned long ticks_anteriores;  // utime + stime de la lectura anterior.
+    struct timespec tiempo_anterior;   // Momento de la lectura anterior.
     int valido;                         // 1 si esta entrada está en uso.
 } CpuAnterior;
 
 // Manejador de SIGALRM: solo levanta la bandera para refrescar.
 static void manejar_sigalrm_pmon(int signo)
 {
-    (void)signo;            // No usamos el número de señal.
+    (void)signo;       // No usamos el número de señal.
     refrescar_pmon = 1;     // Levantamos la bandera.
 }
 
 // Manejador de SIGINT (Ctrl+C): solo levanta la bandera para salir.
 static void manejar_sigint_pmon(int signo)
 {
-    (void)signo;            // No usamos el número de señal.
+    (void)signo; // No usamos el número de señal.
     salir_pmon = 1;         // Levantamos la bandera.
 }
 
@@ -41,39 +41,39 @@ static void manejar_sigint_pmon(int signo)
 // Retorna 0 si pudo leerlos y -1 si el proceso ya no existe o el formato no coincide.
 static int leer_stat_proceso(
     pid_t pid,                  // Proceso a consultar.
-    char *estado,               // Salida: letra del estado.
-    unsigned long *utime,       // Salida: ticks en modo usuario.
-    unsigned long *stime        // Salida: ticks en modo kernel.
+    char *estado,         // Salida es letra del estado.
+    unsigned long *utime,  // la salida es ticks en modo usuario.
+    unsigned long *stime        // Salida es ticks en modo kernel.
 )
 {
-    char ruta[64];      // Ruta del archivo en /proc.
+    char ruta[64];  // Ruta del archivo 
 
     snprintf(                   // Armamos la ruta con el PID.
-        ruta,                   // Destino.
-        sizeof(ruta),           // Tamaño máximo, para no desbordar.
-        "/proc/%d/stat",        // Archivo con el estado y los tiempos de CPU.
-        pid                     // Reemplaza al %d.
+        ruta,               //Destino.
+        sizeof(ruta),           //Tamaño máximo, para no desbordar.
+        "/proc/%d/stat",      //Archivo con el estado y los tiempos de CPU.
+        pid             // Reemplaza al %d.
     );
 
-    FILE *archivo = fopen(ruta, "r");   // Abrimos el archivo en modo lectura.
+    FILE *archivo = fopen(ruta, "r");   //Abrimos el archivo en modo lectura.
 
-    if (archivo == NULL) {      // El proceso ya no existe.
-        return -1;              // Avisamos del error.
+    if (archivo == NULL) {   // El proceso ya no existe.
+        return -1;     //Avisamos del error.
     }
 
-    char linea[4096];       // La línea de stat es larga.
+    char linea[4096];   //La línea de stat es larga.
 
     if (fgets(linea, sizeof(linea), archivo) == NULL) {     // Leemos la única línea del archivo.
-        fclose(archivo);        // Cerramos antes de salir.
-        return -1;              // No se pudo leer.
+        fclose(archivo);    //Cerramos antes de salir.
+        return -1;         // No se pudo leer.
     }
 
-    fclose(archivo);        // Ya tenemos la línea, cerramos el archivo.
+    fclose(archivo);   //Ya tenemos la línea, cerramos el archivo.
 
-    char *cierre_parentesis = strrchr(linea, ')');      // Leemos después del último ')' (el nombre puede tener espacios).
+    char *cierre_parentesis = strrchr(linea, ')');  // Leemos después del último ')' .
 
-    if (cierre_parentesis == NULL) {    // Formato inesperado.
-        return -1;                      // Avisamos del error.
+    if (cierre_parentesis == NULL) {   // Formato inesperado.
+        return -1;        // Avisamos del error.
     }
 
     char *datos = cierre_parentesis + 2;    // Saltamos ") " y quedamos en el campo del estado.
@@ -94,25 +94,25 @@ static int leer_stat_proceso(
 
     // Campos 3 a 15 de stat; solo usamos el estado, utime y stime.
     int leidos = sscanf(
-        datos,                      // Texto desde el campo del estado.
+        datos,              // Texto desde el campo del estado.
         "%c "                       // Estado.
-        "%d %d %d %d %d "           // ppid, pgrp, session, tty_nr, tpgid.
+        "%d %d %d %d %d "    // ppid, pgrp, session, tty_nr, tpgid.
         "%u "                       // flags.
-        "%lu %lu %lu %lu "          // Fallos de página.
+        "%lu %lu %lu %lu "    // Fallos de página.
         "%lu %lu",                  // utime y stime, los que nos interesan.
         estado,                     // Guarda el estado.
-        &ppid,                      // Guarda el PID del padre.
-        &pgrp,                      // Guarda el grupo.
-        &session,                   // Guarda la sesión.
-        &tty_nr,                    // Guarda la terminal.
-        &tpgid,                     // Guarda el grupo en primer plano.
-        &flags,                     // Guarda las banderas.
+        &ppid,           // Guarda el PID del padre.
+        &pgrp,               // Guarda el grupo.
+        &session,             // Guarda la sesión.
+        &tty_nr,             // Guarda la terminal.
+        &tpgid,               // Guarda el grupo en primer plano.
+        &flags,           // Guarda las banderas.
         &minflt,                    // Guarda los fallos menores.
-        &cminflt,                   // Guarda los fallos menores de los hijos.
+        &cminflt,        // Guarda los fallos menores de los hijos.
         &majflt,                    // Guarda los fallos mayores.
-        &cmajflt,                   // Guarda los fallos mayores de los hijos.
-        utime,                      // Guarda los ticks de usuario.
-        stime                       // Guarda los ticks de kernel.
+        &cmajflt,      // Guarda los fallos mayores de los hijos.
+        utime,          // Guarda los ticks de usuario.
+        stime             // Guarda los ticks de kernel.
     );
 
     if (leidos != 13) {     // Faltaron campos.
@@ -170,8 +170,8 @@ static int leer_rss_proceso(pid_t pid, unsigned long *rss_kb)   // rss_kb es la 
 int ejecutar_pmon(int segundos)
 {
 
-    struct sigaction sa_alrm;           // Manejador nuevo de SIGALRM.
-    struct sigaction sa_int;            // Manejador nuevo de SIGINT.
+    struct sigaction sa_alrm;      // Manejador nuevo de SIGALRM.
+    struct sigaction sa_int;         // Manejador nuevo de SIGINT.
     struct sigaction anterior_alrm;     // Manejador de SIGALRM que tenía la shell.
     struct sigaction anterior_int;      // Manejador de SIGINT que tenía la shell.
 
@@ -310,9 +310,9 @@ int ejecutar_pmon(int segundos)
                 // Si el proceso ya terminó, saltamos su fila.
                 if (leer_stat_proceso(
                         procesos[i].pid,    // Proceso a consultar.
-                        &estado,            // Recibe el estado.
-                        &utime,             // Recibe los ticks de usuario.
-                        &stime              // Recibe los ticks de kernel.
+                        &estado,      // Recibe el estado.
+                        &utime,       // Recibe los ticks de usuario.
+                        &stime         // Recibe los ticks de kernel.
                     ) < 0) {
 
                     continue;               // Pasamos al siguiente proceso.
@@ -333,8 +333,8 @@ int ejecutar_pmon(int segundos)
                 // Buscamos si ya teníamos una lectura anterior de este proceso.
                 for (int j = 0; j < capacidad; j++) {
 
-                    if (cpu_anteriores[j].valido &&                 // La entrada está en uso...
-                        cpu_anteriores[j].pid == procesos[i].pid) { // ...y es del mismo proceso.
+                    if (cpu_anteriores[j].valido &&                 // La entrada está en uso
+                        cpu_anteriores[j].pid == procesos[i].pid) { //mismo proceso.
 
                         indice_cpu = j;     // Ya lo habíamos leído antes.
                         break;              // No seguimos buscando.
@@ -348,10 +348,10 @@ int ejecutar_pmon(int segundos)
 
                     // Segundos reales transcurridos desde la lectura anterior.
                     double intervalo_real =
-                        (double)(tiempo_actual.tv_sec -                             // Diferencia de segundos...
+                        (double)(tiempo_actual.tv_sec -                             // Diferencia de segundos
                                 cpu_anteriores[indice_cpu].tiempo_anterior.tv_sec)
                         +
-                        (double)(tiempo_actual.tv_nsec -                            // ...más la de nanosegundos.
+                        (double)(tiempo_actual.tv_nsec -                            
                                 cpu_anteriores[indice_cpu].tiempo_anterior.tv_nsec)
                         / 1000000000.0;                                             // Pasamos los nanosegundos a segundos.
 
@@ -359,9 +359,9 @@ int ejecutar_pmon(int segundos)
 
                         // %CPU = (ticks usados / ticks por segundo) / segundos reales * 100.
                         cpu =
-                            ((double)diferencia_ticks /     // Ticks usados...
-                            (double)ticks_por_segundo /     // ...pasados a segundos de CPU...
-                            intervalo_real) * 100.0;        // ...sobre el tiempo real, en porcentaje.
+                            ((double)diferencia_ticks /     
+                            (double)ticks_por_segundo /     
+                            intervalo_real) * 100.0;        
                     }
 
                     // Guardamos esta lectura para la próxima vuelta.
@@ -409,10 +409,10 @@ int ejecutar_pmon(int segundos)
                 );
             }
 
-            /*
-            * Pedimos al kernel que envíe SIGALRM
-            * dentro de "segundos" segundos.
-            */
+            
+            //Pedimos al kernel que envíe SIGALRM
+            //dentro de "segundos" segundos.
+            
             alarm(segundos);        // Programa el próximo refresco.
         }
 
@@ -420,16 +420,16 @@ int ejecutar_pmon(int segundos)
             sigsuspend(&mascara_original);          // Duerme hasta que llegue una señal.
         }
     }
-    /*
-    * Cancelamos cualquier alarma futura.
-    */
+    
+    //Cancelamos cualquier alarma futura.
+    
     alarm(0);       // Un 0 cancela la alarma pendiente.
 
-    /*
-    * Ponemos SIGALRM temporalmente en SIG_IGN.
-    * Esto también descarta un SIGALRM que pudiera
-    * haber quedado pendiente.
-    */
+    
+    //Ponemos SIGALRM temporalmente en SIG_IGN.
+    //Esto también descarta un SIGALRM que pudiera
+    //haber quedado pendiente.
+    
     struct sigaction ignorar_alrm;          // Configuración temporal.
 
     ignorar_alrm.sa_handler = SIG_IGN;      // Ignorar SIGALRM.
@@ -438,16 +438,16 @@ int ejecutar_pmon(int segundos)
 
     sigaction(SIGALRM, &ignorar_alrm, NULL);    // La aplicamos.
 
-    /*
-    * Restauramos las configuraciones que tenía
-    * la shell antes de entrar a pmon.
-    */
+    
+    // Restauramos las configuraciones que tenía
+    //la shell antes de entrar a pmon.
+    
     sigaction(SIGALRM, &anterior_alrm, NULL);   // SIGALRM como estaba.
     sigaction(SIGINT, &anterior_int, NULL);     // SIGINT como estaba (la shell lo ignora).
 
-    /*
-    * Ahora es seguro restaurar la máscara.
-    */
+    
+    // Ahora es seguro restaurar la máscara.
+    
     sigprocmask(SIG_SETMASK, &mascara_original, NULL);      // Desbloqueamos las señales.
 
     free(cpu_anteriores);       // Liberamos la memoria.

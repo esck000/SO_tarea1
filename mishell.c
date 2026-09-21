@@ -18,7 +18,7 @@ void mostrar_prompt(void)
 {
     char cwd[1024];     // Aquí se guarda el directorio actual.
 
-    if (getcwd(cwd, sizeof(cwd)) != NULL) { //getcwd() obtiene el directorio de trabajo actual y lo almacena en cwd.
+    if (getcwd(cwd, sizeof(cwd)) != NULL) { // obtiene el directorio de trabajo actual y lo almacena en cwd.
         printf("Shelltarea:%s$ ", cwd);     // Prompt con la ruta.
     } else {
         perror("getcwd");                   // No se pudo obtener la ruta.
@@ -66,7 +66,7 @@ int main(void)
         }
         int cantidad = parsear_linea(linea, &pipeline);     // Separamos la línea en comandos.
 
-        if (cantidad < 0) {     // Error de parseo (ya se mostró el mensaje).
+        if (cantidad < 0) {     //error
             continue;           // Pedimos otra línea.
         }
 
