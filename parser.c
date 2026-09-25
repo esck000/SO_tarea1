@@ -4,7 +4,7 @@
 
 //Las comillas simples o dobles agrupan texto en un solo token y hacen
 //que |, <, > queden como simples caracteres dentro del string
- // Osea todo lo que etse dentro de las comillas, no importa el caracter, se imprimrá como string
+// Osea todo lo que este dentro de las comillas, no importa el caracter, se imprimrá como string
 // Revisa la línea antes de partirla: sin comandos vacíos entre pipes y sin comillas sin cerrar.
 // Retorna 0 si es válida y -1 si no.
 static int validar_pipeline(const char *linea)

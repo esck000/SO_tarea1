@@ -77,3 +77,10 @@ int ejecutar_builtin(int argc, char *argv[], int *codigo_salida)
     return BUILTIN_NO;      // No es un built-in: la shell lo ejecutará como un programa externo.
 }
 
+int es_builtin(const char *comando)
+{
+    return strcmp(comando, "cd") == 0 ||
+           strcmp(comando, "jobs") == 0 ||
+           strcmp(comando, "pmon") == 0 ||
+           strcmp(comando, "exit") == 0;
+}

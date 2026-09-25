@@ -15,7 +15,7 @@
 
 // Se llama en el hijo para conectar stdin y stdout a los archivos de <, > o >>.
 // Retorna 0 si todo salió bien y -1 si algún open() o dup2() falla.
-static int aplicar_redirecciones(Redirecciones *redirecciones)
+int aplicar_redirecciones(Redirecciones *redirecciones)
 {
     int fd;
 

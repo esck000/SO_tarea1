@@ -80,22 +80,77 @@ int main(void)
 
             int codigo_salida = 0;      // Lo llena ejecutar_builtin() si el comando es exit.
 
-            // Probamos si es un built-in: cd, jobs, pmon o exit.
-            int resultado_builtin = ejecutar_builtin(
-                comando->argc,      // Cantidad de argumentos.
-                comando->argv,      // Argumentos.
-                &codigo_salida      // Recibe el código de salida de exit.
-            );
+            if (es_builtin(comando->argv[0])) {    
+                int stdin_original = -1;
+                int stdout_original = -1;
 
-            if (resultado_builtin == BUILTIN_OK) {  // Ya se ejecutó en la shell.
-                continue;                           // Pedimos otra línea.
-            }
+                int tiene_redireccion =
+                    comando->redirecciones.entrada != NULL ||
+                    comando->redirecciones.salida != NULL;
 
-            if (resultado_builtin == BUILTIN_EXIT) {    // El usuario escribió exit.
-                return codigo_salida;                   // Terminamos la shell con ese código.
+                if (tiene_redireccion) {
+
+                    stdin_original = dup(STDIN_FILENO);
+
+                    if (stdin_original < 0) {
+                        perror("dup stdin");
+                        continue;
+                    }
+
+                    stdout_original = dup(STDOUT_FILENO);
+
+                    if (stdout_original < 0) {
+                        perror("dup stdout");
+                        close(stdin_original);
+                        continue;
+                    }
+
+                    if (aplicar_redirecciones(&comando->redirecciones) < 0) {
+
+                        dup2(stdin_original, STDIN_FILENO);
+                        dup2(stdout_original, STDOUT_FILENO);
+
+                        close(stdin_original);
+                        close(stdout_original);
+
+                        continue;
+                    }
+                }
+
+                // Probamos si es un built-in: cd, jobs, pmon o exit.
+                int resultado_builtin = ejecutar_builtin(
+                    comando->argc,      // Cantidad de argumentos.
+                    comando->argv,      // Argumentos.
+                    &codigo_salida      // Recibe el código de salida de exit.
+                );
+
+                if (tiene_redireccion) {
+
+                    fflush(stdout);
+
+                    if (dup2(stdin_original, STDIN_FILENO) < 0) {
+                        perror("dup2 stdin");
+                    }
+
+                    if (dup2(stdout_original, STDOUT_FILENO) < 0) {
+                        perror("dup2 stdout");
+                    }
+
+                    close(stdin_original);
+                    close(stdout_original);
+                }
+
+
+                if (resultado_builtin == BUILTIN_OK) {  // Ya se ejecutó en la shell.
+                    continue;                           // Pedimos otra línea.
+                }
+
+                if (resultado_builtin == BUILTIN_EXIT) {    // El usuario escribió exit.
+                    return codigo_salida;                   // Terminamos la shell con ese código.
+                }
             }
         }
-
+        
         // No era un built-in: lo ejecutamos con fork() + execvp().
         if (ejecutar_pipeline(&pipeline) < 0) {
             return EXIT_FAILURE;    // Error fatal (por ejemplo, falló fork()).

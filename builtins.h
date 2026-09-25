@@ -10,4 +10,7 @@
 
 int ejecutar_builtin(int argc, char *argv[], int *codigo_salida);
 // argc y argv son los argumentos del comando ya procesado, codigo_salida solo se escribe cuando el comando es "exit"
+
+int es_builtin(const char *comando);
+
 #endif

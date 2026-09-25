@@ -2,6 +2,10 @@
 #define EXECUTOR_H
 #include "parser.h"      // Redirecciones y Pipeline
 
+
+
+int aplicar_redirecciones(Redirecciones *redirecciones);
+
 // Ejecuta un solo comando con fork() + execvp(). Si background es 1, no espera a que termine.
 // Retorna 0 si todo salió bien y -1 en caso de error.
 int ejecutar_comando(char *argv[], int argc, int background, Redirecciones *redirecciones);
