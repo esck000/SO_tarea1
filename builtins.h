@@ -11,6 +11,8 @@
 int ejecutar_builtin(int argc, char *argv[], int *codigo_salida);
 // argc y argv son los argumentos del comando ya procesado, codigo_salida solo se escribe cuando el comando es "exit"
 
+//si el comando es un built-in, retorna 1 si lo es y 0 si no.
+// mishell.c aplica las redirecciones <, > o >> antes de ejecutarlo.
 int es_builtin(const char *comando);
 
 #endif

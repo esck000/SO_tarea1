@@ -77,10 +77,11 @@ int ejecutar_builtin(int argc, char *argv[], int *codigo_salida)
     return BUILTIN_NO;      // No es un built-in: la shell lo ejecutará como un programa externo.
 }
 
+//se usa en mishell.c para aplicarle las redirecciones antes de ejecutarlo, si no es builtin, retorna cero
 int es_builtin(const char *comando)
 {
-    return strcmp(comando, "cd") == 0 ||
-           strcmp(comando, "jobs") == 0 ||
-           strcmp(comando, "pmon") == 0 ||
-           strcmp(comando, "exit") == 0;
+    return strcmp(comando, "cd") == 0 ||   //Cambia de directorio.
+           strcmp(comando, "jobs") == 0 ||  // Lista los jobs en background.
+           strcmp(comando, "pmon") == 0 ||  //monitor de procesos.
+           strcmp(comando, "exit") == 0;   //termina la shell.
 }

@@ -13,8 +13,10 @@
 #include <fcntl.h> // Para usar open() y O_CREAT, O_WRONLY, O_TRUNC, O_APPEND
 #include <errno.h>       // errno, ECHILD, ESRCH
 
-// Se llama en el hijo para conectar stdin y stdout a los archivos de <, > o >>.
-// Retorna 0 si todo salió bien y -1 si algún open() o dup2() falla.
+//conecta stdin y stdout a los archivos de <, > o >>, con open() y dup2().
+//y no es static porque la llaman los hijos antes de execvp() y tambien mishell.c,
+// que la usa para aplicarle las redirecciones a los built-ins (cd, jobs, pmon, exit).
+//dará 0 si esta bien y -1 si open() o dup2() falla
 int aplicar_redirecciones(Redirecciones *redirecciones)
 {
     int fd;

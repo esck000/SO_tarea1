@@ -80,40 +80,43 @@ int main(void)
 
             int codigo_salida = 0;      // Lo llena ejecutar_builtin() si el comando es exit.
 
+            // Un built-in corre en la shell, no en un hijo. Si trae redirecciones hay que
+            //guardar stdin y stdout, aplicarlas, ejecutarlo y despues dejar todo como estaba.
             if (es_builtin(comando->argv[0])) {    
-                int stdin_original = -1;
-                int stdout_original = -1;
+                int stdin_original = -1;    //Copia de stdin, para restaurarlo.
+                int stdout_original = -1;   //copia de stdout, para restaurarlo.
 
-                int tiene_redireccion =
+                int tiene_redireccion =                             //1 si el comando trae <, > o >>.
                     comando->redirecciones.entrada != NULL ||
                     comando->redirecciones.salida != NULL;
 
                 if (tiene_redireccion) {
 
-                    stdin_original = dup(STDIN_FILENO);
+                    stdin_original = dup(STDIN_FILENO);     // Guardamos stdin en un descriptor libre.
 
                     if (stdin_original < 0) {
-                        perror("dup stdin");
-                        continue;
+                        perror("dup stdin");                // No se pudo guardar.
+                        continue;                           // No ejecutamos el built-in.
                     }
 
-                    stdout_original = dup(STDOUT_FILENO);
+                    stdout_original = dup(STDOUT_FILENO);   // Guardamos stdout.
 
                     if (stdout_original < 0) {
                         perror("dup stdout");
-                        close(stdin_original);
+                        close(stdin_original);              // Cerramos la copia que ya habiamos hecho.
                         continue;
                     }
 
+                    // Conectamos stdin y stdout a los archivos indicados.
                     if (aplicar_redirecciones(&comando->redirecciones) < 0) {
 
-                        dup2(stdin_original, STDIN_FILENO);
+                        dup2(stdin_original, STDIN_FILENO);     // si falla volvemos a la terminal.
                         dup2(stdout_original, STDOUT_FILENO);
 
-                        close(stdin_original);
+                        close(stdin_original);      //Soltamos las copias.
                         close(stdout_original);
 
-                        continue;
+                        continue;       // No ejecutamos el built-in, igual que bash.
                     }
                 }
 
@@ -124,19 +127,19 @@ int main(void)
                     &codigo_salida      // Recibe el código de salida de exit.
                 );
 
-                if (tiene_redireccion) {
+                if (tiene_redireccion) {        // Dejamos todo como estaba antes.
 
-                    fflush(stdout);
+                    fflush(stdout);     // Vaciamos el buffer AHORA, mientras stdout sigue siendo el archivo.
 
-                    if (dup2(stdin_original, STDIN_FILENO) < 0) {
+                    if (dup2(stdin_original, STDIN_FILENO) < 0) {   // Restauramos stdin.
                         perror("dup2 stdin");
                     }
 
-                    if (dup2(stdout_original, STDOUT_FILENO) < 0) {
+                    if (dup2(stdout_original, STDOUT_FILENO) < 0) { // Restauramos stdout.
                         perror("dup2 stdout");
                     }
 
-                    close(stdin_original);
+                    close(stdin_original);      // Soltamos las copias: si no, se acumularian.
                     close(stdout_original);
                 }
 
@@ -145,18 +148,18 @@ int main(void)
                     continue;                           // Pedimos otra línea.
                 }
 
-                if (resultado_builtin == BUILTIN_EXIT) {    // El usuario escribió exit.
+                if (resultado_builtin == BUILTIN_EXIT) {    //El usuario escribió exit.
                     return codigo_salida;                   // Terminamos la shell con ese código.
                 }
             }
         }
         
-        // No era un built-in: lo ejecutamos con fork() + execvp().
+        // No era un built-in, por lo que lo ejecutamos con fork() + execvp().
         if (ejecutar_pipeline(&pipeline) < 0) {
             return EXIT_FAILURE;    // Error fatal (por ejemplo, falló fork()).
         }
     }
 
 
-    return 0;   // Salimos por Ctrl+D.
+    return 0;   //se sale con Ctrl+D.
 }

@@ -2,8 +2,8 @@
 #define EXECUTOR_H
 #include "parser.h"      // Redirecciones y Pipeline
 
-
-
+//se usa los hijos antes de execvp(), y mishell.c para los built-ins.
+//Retorna 0 si todo salio bien y -1 si falla open() o dup2().
 int aplicar_redirecciones(Redirecciones *redirecciones);
 
 // Ejecuta un solo comando con fork() + execvp(). Si background es 1, no espera a que termine.
